@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARO — 3D Artist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=DM+Sans:wght@200;300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0c;            /* deep black */
+    --bg2: #0f0f14;           /* slightly lighter black */
+    --surface: #13131a;        /* dark surface */
+    --border: rgba(255,255,255,0.06);
+    --text: #e8e4dc;           /* warm off-white */
+    --muted: rgba(232,228,220,0.38);
+    --accent1: #1e4b3c;        /* deep emerald */
+    --accent2: #2f6b55;        /* medium green */
+    --gold: #b8a35c;           /* muted gold / greenish gold */
+    --glow1: rgba(30,75,60,0.15);
+    --glow2: rgba(47,107,85,0.12);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    position: fixed;
+    width: 10px; height: 10px;
+    background: var(--accent1);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: width 0.25s, height 0.25s, opacity 0.25s, background 0.25s;
+    mix-blend-mode: screen;
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid rgba(30,75,60,0.5);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: width 0.4s cubic-bezier(.16,1,.3,1), height 0.4s cubic-bezier(.16,1,.3,1), border-color 0.3s;
+  }
+  body:hover .cursor { opacity: 1; }
+  .cursor.hovering { width: 18px; height: 18px; background: var(--gold); }
+  .cursor-ring.hovering { width: 54px; height: 54px; border-color: rgba(184,163,92,0.4); }
+
+  /* Animated gradient orbs background — very subtle */
+  .bg-orbs {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(140px);
+    opacity: 0.08; /* even more subtle */
+    animation: orbFloat linear infinite;
+  }
+  .orb1 { width: 600px; height: 600px; background: var(--accent1); top: -200px; left: -150px; animation-duration: 28s; animation-delay: 0s; }
+  .orb2 { width: 500px; height: 500px; background: var(--accent2); bottom: -150px; right: -100px; animation-duration: 34s; animation-delay: -10s; }
+  .orb3 { width: 350px; height: 350px; background: var(--gold); top: 40%; left: 50%; transform: translate(-50%,-50%); animation-duration: 22s; animation-delay: -5s; opacity: 0.04; }
+
+  @keyframes orbFloat {
+    0%   { transform: translate(0,0) scale(1); }
+    25%  { transform: translate(30px,-20px) scale(1.04); }
+    50%  { transform: translate(-20px,30px) scale(0.97); }
+    75%  { transform: translate(10px,15px) scale(1.02); }
+    100% { transform: translate(0,0) scale(1); }
+  }
+
+  /* Very subtle noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.02;  /* extremely subtle noise */
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ─── HERO ─────────────────────────────────────── */
+  .hero {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 2rem;
+    opacity: 0;
+    animation: heroFade 1.4s cubic-bezier(.16,1,.3,1) 0.2s forwards;
+  }
+
+  @keyframes heroFade {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero-eyebrow {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 400;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2.2rem;
+    opacity: 0;
+    animation: heroFade 1.2s cubic-bezier(.16,1,.3,1) 0.5s forwards;
+  }
+
+  .hero-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: clamp(6rem, 18vw, 16rem);
+    line-height: 0.88;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #e8e4dc 0%, #b8a35c 30%, #1e4b3c 70%, #2f6b55 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    background-size: 200% 200%;
+    animation: heroFade 1.4s cubic-bezier(.16,1,.3,1) 0.3s forwards,
+               gradientShift 10s ease infinite 1.7s;
+    opacity: 0;
+  }
+
+  @keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50%       { background-position: 100% 50%; }
+  }
+
+  .hero-title {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 200;
+    font-size: clamp(0.8rem, 1.6vw, 1.05rem);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 2rem;
+    opacity: 0;
+    animation: heroFade 1.2s cubic-bezier(.16,1,.3,1) 0.8s forwards;
+  }
+
+  .hero-line {
+    width: 1px;
+    height: 0;
+    background: linear-gradient(to bottom, transparent, var(--accent1), transparent);
+    margin: 3.5rem auto 0;
+    animation: lineGrow 1.4s cubic-bezier(.16,1,.3,1) 1.2s forwards;
+  }
+  @keyframes lineGrow {
+    to { height: 70px; }
+  }
+
+  /* ─── GALLERY ───────────────────────────────────── */
+  .gallery-section {
+    position: relative;
+    z-index: 2;
+    padding: 6rem 3rem 10rem;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.6rem;
+  }
+
+  @media (max-width: 1200px) { .gallery-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 800px)  { .gallery-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; } }
+  @media (max-width: 500px)  { .gallery-grid { grid-template-columns: 1fr; gap: 1rem; } }
+  @media (max-width: 800px)  { .gallery-section { padding: 4rem 1.2rem 6rem; } }
+
+  .card {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: none;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: transform 0.55s cubic-bezier(.16,1,.3,1),
+                box-shadow 0.45s ease,
+                border-color 0.45s ease;
+    will-change: transform;
+  }
+
+  .card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .card:hover {
+    transform: translateY(-6px) scale(1.018);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(30,75,60,0.25),
+                0 0 40px rgba(30,75,60,0.09);
+    border-color: rgba(30,75,60,0.28);
+  }
+
+  .card-media-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: #0d0d12;
+    aspect-ratio: 1 / 1;
+  }
+
+  .card-media-wrap img,
+  .card-media-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.7s cubic-bezier(.16,1,.3,1);
+  }
+
+  .card:hover .card-media-wrap img,
+  .card:hover .card-media-wrap video {
+    transform: scale(1.06);
+  }
+
+  /* Hover overlay — subtle green */
+  .card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(30,75,60,0.1), rgba(47,107,85,0.05));
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card:hover .card-overlay { opacity: 1; }
+  .card-overlay-icon {
+    width: 44px; height: 44px;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transform: scale(0.7);
+    transition: transform 0.4s cubic-bezier(.16,1,.3,1);
+  }
+  .card:hover .card-overlay-icon { transform: scale(1); }
+  .card-overlay-icon svg { width: 18px; height: 18px; fill: white; opacity: 0.8; }
+
+  /* ─── LIGHTBOX ──────────────────────────────────── */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(8,8,12,0.96);
+    backdrop-filter: blur(24px) saturate(0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .lightbox.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .lightbox-inner {
+    position: relative;
+    width: 92vw;
+    max-width: 1100px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: scale(0.94);
+    transition: transform 0.45s cubic-bezier(.16,1,.3,1);
+  }
+  .lightbox.open .lightbox-inner { transform: scale(1); }
+
+  .lightbox-media-wrap {
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 10px;
+  }
+  .lightbox-media-wrap img,
+  .lightbox-media-wrap video {
+    max-width: 100%;
+    max-height: 80vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    display: block;
+  }
+
+  .lightbox-close {
+    position: fixed;
+    top: 2rem; right: 2.2rem;
+    width: 44px; height: 44px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: none;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.25s, transform 0.25s;
+    z-index: 10;
+  }
+  .lightbox-close:hover { background: rgba(255,255,255,0.12); transform: rotate(90deg); }
+  .lightbox-close svg { width: 16px; height: 16px; stroke: var(--text); stroke-width: 1.5; fill: none; }
+
+  .lightbox-nav {
+    position: fixed;
+    top: 50%; transform: translateY(-50%);
+    width: 48px; height: 48px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: none;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.25s, transform 0.25s;
+    z-index: 10;
+  }
+  .lightbox-nav:hover { background: rgba(255,255,255,0.1); }
+  .lightbox-prev { left: 1.5rem; }
+  .lightbox-next { right: 1.5rem; }
+  .lightbox-prev:hover { transform: translateY(-50%) translateX(-3px); }
+  .lightbox-next:hover { transform: translateY(-50%) translateX(3px); }
+  .lightbox-nav svg { width: 18px; height: 18px; stroke: var(--text); stroke-width: 1.5; fill: none; }
+
+  .lightbox-counter {
+    position: fixed;
+    bottom: 2rem; left: 50%; transform: translateX(-50%);
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+  }
+
+  /* ─── FOOTER ─────────────────────────────────────── */
+  .footer {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    padding: 3rem 2rem 4rem;
+    border-top: 1px solid var(--border);
+  }
+  .footer-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.6rem;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    background: linear-gradient(90deg, var(--accent1), var(--gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .footer-copy {
+    margin-top: 0.8rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Transition fade for lightbox image swap */
+  .lightbox-media-wrap img.fading {
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .lightbox-media-wrap img.showing {
+    opacity: 1;
+    transition: opacity 0.28s ease;
+  }
+
+  /* Staggered card animation delays set via JS */
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- Background orbs -->
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<!-- ─── HERO ─────────────────────────────── -->
+<section class="hero">
+  <p class="hero-eyebrow">Portfolio</p>
+  <h1 class="hero-name">MARO</h1>
+  <p class="hero-title">3D Artist</p>
+  <div class="hero-line"></div>
+</section>
+
+<!-- ─── GALLERY ──────────────────────────── -->
+<section class="gallery-section">
+  <div class="gallery-grid" id="gallery">
+
+    <div class="card" data-index="0">
+      <div class="card-media-wrap">
+        <img src="Art/1.jpg" alt="Work 1" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="1">
+      <div class="card-media-wrap">
+        <img src="Art/2.jpg" alt="Work 2" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="2">
+      <div class="card-media-wrap">
+        <img src="Art/3.jpg" alt="Work 3" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="3">
+      <div class="card-media-wrap">
+        <img src="Art/4.jpg" alt="Work 4" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="4">
+      <div class="card-media-wrap">
+        <img src="Art/5.jpg" alt="Work 5" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="5">
+      <div class="card-media-wrap">
+        <img src="Art/6.jpg" alt="Work 6" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="6">
+      <div class="card-media-wrap">
+        <img src="Art/7.jpg" alt="Work 7" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="7">
+      <div class="card-media-wrap">
+        <img src="Art/8.jpg" alt="Work 8" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="8">
+      <div class="card-media-wrap">
+        <img src="Art/9.jpg" alt="Work 9" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="9">
+      <div class="card-media-wrap">
+        <img src="Art/10.png" alt="Work 10" loading="lazy">
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="10">
+      <div class="card-media-wrap">
+        <video src="Art/11.mp4" alt="Work 11" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="11">
+      <div class="card-media-wrap">
+        <video src="Art/12.mp4" alt="Work 12" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="12">
+      <div class="card-media-wrap">
+        <video src="Art/13.mp4" alt="Work 13" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="13">
+      <div class="card-media-wrap">
+        <video src="Art/14.mp4" alt="Work 14" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="14">
+      <div class="card-media-wrap">
+        <video src="Art/15.mp4" alt="Work 15" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="15">
+      <div class="card-media-wrap">
+        <video src="Art/16.mp4" alt="Work 16" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="16">
+      <div class="card-media-wrap">
+        <video src="Art/17.mp4" alt="Work 17" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="17">
+      <div class="card-media-wrap">
+        <video src="Art/18.mp4" alt="Work 18" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="18">
+      <div class="card-media-wrap">
+        <video src="Art/19.mp4" alt="Work 19" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="19">
+      <div class="card-media-wrap">
+        <video src="Art/20.mp4" alt="Work 20" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="20">
+      <div class="card-media-wrap">
+        <video src="Art/21.mp4" alt="Work 21" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+    <div class="card" data-index="21">
+      <div class="card-media-wrap">
+        <video src="Art/22.mp4" alt="Work 22" loading="lazy" autoplay loop muted playsinline></video>
+        <div class="card-overlay"><div class="card-overlay-icon"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div></div>
+      </div>
+      <!-- label removed -->
+    </div>
+
+  </div>
+</section>
+
+<!-- ─── FOOTER ─────────────────────────── -->
+<footer class="footer">
+  <div class="footer-name">MARO</div>
+  <p class="footer-copy">3D Artist · All rights reserved</p>
+</footer>
+
+<!-- ─── LIGHTBOX ──────────────────────── -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+  <div class="lightbox-inner">
+    <div class="lightbox-media-wrap" id="lbMediaWrap">
+      <img id="lbImg" src="" alt="" class="showing">
+      <video id="lbVideo" src="" class="showing" style="display:none;" controls></video>
+    </div>
+    <!-- lightbox label removed -->
+  </div>
+  <button class="lightbox-close" id="lbClose" aria-label="Close">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-prev" id="lbPrev" aria-label="Previous">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-next" id="lbNext" aria-label="Next">
+    <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+  <div class="lightbox-counter" id="lbCounter"></div>
+</div>
+
+<script>
+  // ── Media sources ──────────────────────────────────────
+  const media = [
+    { src: 'Art/1.jpg',  label: 'Work 1',  type: 'image' },
+    { src: 'Art/2.jpg',  label: 'Work 2',  type: 'image' },
+    { src: 'Art/3.jpg',  label: 'Work 3',  type: 'image' },
+    { src: 'Art/4.jpg',  label: 'Work 4',  type: 'image' },
+    { src: 'Art/5.jpg',  label: 'Work 5',  type: 'image' },
+    { src: 'Art/6.jpg',  label: 'Work 6',  type: 'image' },
+    { src: 'Art/7.jpg',  label: 'Work 7',  type: 'image' },
+    { src: 'Art/8.jpg',  label: 'Work 8',  type: 'image' },
+    { src: 'Art/9.jpg',  label: 'Work 9',  type: 'image' },
+    { src: 'Art/10.png', label: 'Work 10', type: 'image' },
+    { src: 'Art/11.mp4', label: 'Work 11', type: 'video' },
+    { src: 'Art/12.mp4', label: 'Work 12', type: 'video' },
+    { src: 'Art/13.mp4', label: 'Work 13', type: 'video' },
+    { src: 'Art/14.mp4', label: 'Work 14', type: 'video' },
+    { src: 'Art/15.mp4', label: 'Work 15', type: 'video' },
+    { src: 'Art/16.mp4', label: 'Work 16', type: 'video' },
+    { src: 'Art/17.mp4', label: 'Work 17', type: 'video' },
+    { src: 'Art/18.mp4', label: 'Work 18', type: 'video' },
+    { src: 'Art/19.mp4', label: 'Work 19', type: 'video' },
+    { src: 'Art/20.mp4', label: 'Work 20', type: 'video' },
+    { src: 'Art/21.mp4', label: 'Work 21', type: 'video' },
+    { src: 'Art/22.mp4', label: 'Work 22', type: 'video' },
+  ];
+
+  // ── Custom Cursor ──────────────────────────────────────
+  const cursor     = document.getElementById('cursor');
+  const cursorRing = document.getElementById('cursorRing');
+  let mx = -100, my = -100, rx = -100, ry = -100;
+
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    cursor.style.left = mx + 'px';
+    cursor.style.top  = my + 'px';
+  });
+
+  (function animateRing() {
+    rx += (mx - rx) * 0.13;
+    ry += (my - ry) * 0.13;
+    cursorRing.style.left = rx + 'px';
+    cursorRing.style.top  = ry + 'px';
+    requestAnimationFrame(animateRing);
+  })();
+
+  document.querySelectorAll('.card, .lightbox-close, .lightbox-nav').forEach(el => {
+    el.addEventListener('mouseenter', () => { cursor.classList.add('hovering'); cursorRing.classList.add('hovering'); });
+    el.addEventListener('mouseleave', () => { cursor.classList.remove('hovering'); cursorRing.classList.remove('hovering'); });
+  });
+
+  // ── Scroll-reveal (Intersection Observer) ─────────────
+  const cards = document.querySelectorAll('.card');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const card = entry.target;
+        const idx  = parseInt(card.dataset.index);
+        const col  = idx % 4;
+        setTimeout(() => { card.classList.add('visible'); }, col * 80);
+        observer.unobserve(card);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  cards.forEach(card => observer.observe(card));
+
+  // ── Lightbox ───────────────────────────────────────────
+  const lb       = document.getElementById('lightbox');
+  const lbImg    = document.getElementById('lbImg');
+  const lbVideo  = document.getElementById('lbVideo');
+  const lbClose  = document.getElementById('lbClose');
+  const lbPrev   = document.getElementById('lbPrev');
+  const lbNext   = document.getElementById('lbNext');
+  const lbCtr    = document.getElementById('lbCounter');
+  let current = 0;
+
+  function openLightbox(idx) {
+    current = idx;
+    setLbItem(idx, false);
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    // Pause video when closing
+    lbVideo.pause();
+  }
+
+  function setLbItem(idx, animate) {
+    const item = media[idx];
+    
+    // Handle video vs image
+    if (item.type === 'video') {
+      lbImg.style.display = 'none';
+      lbVideo.style.display = 'block';
+      lbVideo.src = item.src;
+      lbVideo.play();
+    } else {
+      lbVideo.pause();
+      lbVideo.style.display = 'none';
+      lbVideo.src = '';
+      lbImg.style.display = 'block';
+      
+      if (animate) {
+        lbImg.classList.add('fading');
+        lbImg.classList.remove('showing');
+        setTimeout(() => {
+          lbImg.src = item.src;
+          lbImg.alt = item.label;
+          lbImg.classList.remove('fading');
+          lbImg.classList.add('showing');
+        }, 180);
+      } else {
+        lbImg.src = item.src;
+        lbImg.alt = item.label;
+        lbImg.classList.add('showing');
+      }
+    }
+    
+    lbCtr.textContent   = (idx + 1) + ' / ' + media.length;
+  }
+
+  function navigate(dir) {
+    current = (current + dir + media.length) % media.length;
+    setLbItem(current, true);
+  }
+
+  cards.forEach((card, i) => {
+    card.addEventListener('click', () => openLightbox(i));
+  });
+
+  lbClose.addEventListener('click', closeLightbox);
+  lbPrev.addEventListener('click', () => navigate(-1));
+  lbNext.addEventListener('click', () => navigate(1));
+
+  lb.addEventListener('click', e => {
+    if (e.target === lb) closeLightbox();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!lb.classList.contains('open')) return;
+    if (e.key === 'Escape')      closeLightbox();
+    if (e.key === 'ArrowLeft')   navigate(-1);
+    if (e.key === 'ArrowRight')  navigate(1);
+  });
+
+  // Touch swipe for lightbox
+  let touchStartX = 0;
+  lb.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener('touchend',   e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) navigate(dx < 0 ? 1 : -1);
+  });
+</script>
+</body>
+</html>
